@@ -33,15 +33,17 @@
  *****************************************************************************/
 
 module $MODULE_NAME_AXI_WRAPPER$ #(
-	parameter  N = $N$,	// output precision
-	parameter  M = $M$,	// input/threshold precision
-	parameter  C = $C$,	// Channels
-	int BIAS = $BIAS$,  // offsetting the output [0, 2^N-1) -> [-BIAS, 2^N-1 - BIAS)
+	parameter  N  = $N$,	// output precision
+	parameter  M  = $M$,	// input/threshold precision
+	parameter  C  = $C$,	// Channels
+	parameter  PE = $PE$,	// Input parallelism
+	parameter  SIGNED = ($SIGN$ == "signed"),	// Input signedness
+	parameter  BIAS = $BIAS$,  // offsetting the output [0, 2^N-1) -> [+BIAS, 2^N-1 + BIAS)
 
 	parameter  C_BITS = C < 2 ? 1 : $clog2(C),
-	parameter  O_BITS = BIAS > 0?
-		/* unsigned */ $clog2(2**N-BIAS) :
-		/* signed */ 1+$clog2(BIAS >= 2**(N-1)? BIAS : 2**N-BIAS)
+	parameter  O_BITS = BIAS >= 0?
+		/* unsigned */ $clog2(2**N+BIAS) :
+		/* signed */ 1+$clog2(-BIAS >= 2**(N-1)? -BIAS : 2**N+BIAS)
 )(
 	//- Global Control ------------------
 	input	ap_clk,
@@ -83,7 +85,7 @@ module $MODULE_NAME_AXI_WRAPPER$ #(
 	output	[((O_BITS+7)/8)*8-1:0]  m_axis_tdata
 );
 
-	$MODULE_NAME_AXI$ #(.N(N), .M(M), .C(C), .BIAS(BIAS), .O_BITS(O_BITS)) inst (
+	thresholding_axi #(.N(N), .M(M), .C(C), .PE(PE), .SIGNED(SIGNED), .BIAS(BIAS)) inst (
 		//- Global Control ------------------
 		.ap_clk(ap_clk),
 		.ap_rst_n(ap_rst_n),

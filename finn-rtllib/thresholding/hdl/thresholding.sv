@@ -43,15 +43,18 @@
  *  threshold configuration relies on a channel address prefix. Inputs are
  *  accompanied by a channel selector.
  *****************************************************************************/
-module $MODULE_NAME$ #(
-	int unsigned  N,  // output precision
-	int unsigned  M,  // input/threshold precision
-	int unsigned  C,  // number of channels
+module thresholding #(
+	int unsigned  N,	// output precision
+	int unsigned  M,	// input/threshold precision
+	int unsigned  C,	// number of channels
 
-	int BIAS,  // offsetting the output [0, 2^N-1) -> [BIAS, 2^N-1 + BIAS)
+	bit  SIGNED = 1,	// signed inputs
+	int  BIAS   = 0,	// offsetting the output [0, 2^N-1] -> [BIAS, 2^N-1 + BIAS]
 
-	int unsigned  C_BITS,
-	int unsigned O_BITS
+	localparam int unsigned  C_BITS = C < 2? 1 : $clog2(C);
+	localparam int unsigned  O_BITS = BIAS >= 0?
+		/* unsigned */ $clog2(2**N+BIAS) :
+		/* signed */ 1+$clog2(-BIAS >= 2**(N-1)? -BIAS : 2**N+BIAS)
 )(
 	// Global Control
 	input	logic  clk,
@@ -67,8 +70,8 @@ module $MODULE_NAME$ #(
 
 	// Input Stream
 	input	logic  ivld,
-	input	logic        [C_BITS-1:0]  icnl,	// Ignored for C == 1
-	input	logic $SIGN$ [M     -1:0]  idat,
+	input	logic [C_BITS-1:0]  icnl,	// Ignored for C == 1
+	input	logic [M     -1:0]  idat,
 
 	// Output Stream
 	output	logic  ovld,
@@ -78,10 +81,10 @@ module $MODULE_NAME$ #(
 
 	// Pipeline Links & Feed
 	typedef struct packed {
-		logic                      vld;	// Valid data identification
-		logic        [C_BITS-1:0]  cnl;	// Channel
-		logic $SIGN$ [M     -1:0]  val;	// Original input value
-		logic        [0:N-1]       res;	// Assembling result with valid prefix [0:stage] after stage #stage
+		logic               vld;	// Valid data identification
+		logic [C_BITS-1:0]  cnl;	// Channel
+		logic [M     -1:0]  val;	// Original input value
+		logic [0:N-1]       res;	// Assembling result with valid prefix [0:stage] after stage #stage
 	} pipe_t;
 	uwire pipe_t  pipe[0:N];
 	assign	pipe[0] = pipe_t'{ vld: ivld, cnl: icnl, val: idat, res: {N{1'bx}} };	// Feed original input
@@ -91,13 +94,13 @@ module $MODULE_NAME$ #(
 	for(genvar  stage = 0; stage < N; stage++) begin : genStages
 
 		// Threshold Memory
-		uwire $SIGN$ [M-1:0]  thresh;
+		uwire [M-1:0]  thresh;
 		if(1) begin : blkUpdate
 
 			// Write control: local select from global address
 			uwire  we = twe && tws[stage];
 			if((C == 1) && (stage == 0)) begin
-				logic $SIGN$ [M-1:0]  Thresh = 'x;
+				logic [M-1:0]  Thresh = 'x;
 				always_ff @(posedge clk) begin
 					if(rst)      Thresh <= 'x;
 					else if(we)  Thresh <= twd;
@@ -105,7 +108,7 @@ module $MODULE_NAME$ #(
 				assign  thresh = Thresh;
 			end
 			else begin
-				logic $SIGN$ [M-1:0]  Threshs[C * 2**stage];
+				logic [M-1:0]  Threshs[C * 2**stage];
 				uwire [$clog2(C)+stage-1:0]  wa = twa[$left(twa):N-stage];
 				uwire [$clog2(C)+stage-1:0]  ra;
 				if(C > 1)  assign  ra[stage+:C_BITS] = pipe[stage].cnl;
@@ -117,7 +120,7 @@ module $MODULE_NAME$ #(
 				end
 
 				// Read
-				logic $SIGN$ [M-1:0]  RdReg;
+				logic [M-1:0]  RdReg;
 				always_ff @(posedge clk) begin
 					if(en)  RdReg <= Threshs[ra];
 				end
@@ -135,9 +138,12 @@ module $MODULE_NAME$ #(
 
 		// Assemble pipeline data
 		logic [0:N-1]  res;
+		uwire  cmp =
+			SIGNED?      $signed(thresh) <=   $signed(State.val) :
+			/* else */ $unsigned(thresh) <= $unsigned(State.val);
 		always_comb begin
 			res        = State.res;
-			res[stage] = thresh <= State.val;	// Patch in next result bit
+			res[stage] = cmp;	// Patch in next result bit
 		end
 		assign	pipe[stage+1] = '{
 			vld: State.vld,
@@ -153,4 +159,4 @@ module $MODULE_NAME$ #(
 	assign	ocnl = pipe[N].cnl;
 	assign	odat = pipe[N].res + BIAS;
 
-endmodule : $MODULE_NAME$
+endmodule : thresholding
