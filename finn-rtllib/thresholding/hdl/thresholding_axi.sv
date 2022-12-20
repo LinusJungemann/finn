@@ -40,7 +40,7 @@
 
 module thresholding_axi #(
 	int unsigned  N,		// output precision
-	int unsigned  M,		// input/threshold precision
+	int unsigned  K,		// input/threshold precision
 	int unsigned  C  = 1,	// Channels
 	int unsigned  PE = 1,	// Processing Parallelism, requires C = k*PE
 
@@ -85,7 +85,7 @@ module thresholding_axi #(
 	//- AXI Stream - Input --------------
 	output	logic  s_axis_tready,
 	input	logic  s_axis_tvalid,
-	input	logic [((PE*M+7)/8)*8-1:0]  s_axis_tdata,
+	input	logic [((PE*K+7)/8)*8-1:0]  s_axis_tdata,
 
 	//- AXI Stream - Output -------------
 	input	logic  m_axis_tready,
@@ -107,13 +107,13 @@ module thresholding_axi #(
 	//- AXI Lite: Threshold Configuration -----------------------------------
 	uwire  twe[PE];
 	uwire [$clog2(C)+N-1:0]  twa;
-	uwire [          M-1:0]  twd;
+	uwire [          K-1:0]  twd;
 	if(1) begin : blkAxiLite
 		logic  WABusy = 0;
 		logic  WDBusy = 0;
 		logic  Sel[PE] = '{ default: 'x };
 		logic [$clog2(C)+N-1:0]  Addr = 'x;
-		logic [          M-1:0]  Data = 'x;
+		logic [          K-1:0]  Data = 'x;
 
 		for(genvar  pe = 0; pe < PE; pe++) begin
 			assign	twe[pe] = WABusy && WDBusy && Sel[pe];
@@ -146,7 +146,7 @@ module thresholding_axi #(
 				end
 				if(!WDBusy) begin
 					WDBusy <= s_axilite_WVALID;
-					Data   <= s_axilite_WDATA[M-1:0];
+					Data   <= s_axilite_WDATA[K-1:0];
 				end
 			end
 		end
@@ -178,33 +178,37 @@ module thresholding_axi #(
 			logic  vld;
 			logic [PE-1:0][O_BITS-1:0]  dat;
 		} buf_t;
-		buf_t  Buf[2] = '{ default: '{ vld: 0, dat: 'x } };
+		buf_t  A = '{ vld: 0, dat: 'x };
+		buf_t  B = '{ vld: 0, dat: 'x };
 		always_ff @(posedge clk) begin
-			if(rst)  Buf <= '{ default: '{ vld: 0, dat: 'x } };
+			if(rst) begin
+				A <= '{ vld: 0, dat: 'x };
+				B <= '{ vld: 0, dat: 'x };
+			end
 			else begin
-				if(!Buf[1].vld || m_axis_tready) begin
-					Buf[1] <= '{
-						vld: Buf[0].vld || ovld[0],
-						dat: Buf[0].vld? Buf[0].dat : odat
+				if(!B.vld || m_axis_tready) begin
+					B <= '{
+						vld: A.vld || ovld[0],
+						dat: A.vld? A.dat : odat
 					};
 				end
-				Buf[0].vld <= Buf[1].vld && !m_axis_tready && (Buf[0].vld || ovld);
-				if(!Buf[0].vld)  Buf[0].dat <= odat;
+				A.vld <= B.vld && !m_axis_tready && (A.vld || ovld[0]);
+				if(!A.vld)  A.dat <= odat;
 			end
 		end
-		assign	en = !Buf[0].vld;
+		assign	en = !A.vld;
 
-		assign	m_axis_tvalid = Buf[1].vld;
-		assign	m_axis_tdata  = Buf[1].dat;
+		assign	m_axis_tvalid = B.vld;
+		assign	m_axis_tdata  = B.dat;
 
 	end : blkOutputDecouple
 
 	localparam int unsigned  C_BITS = C < 2? 1 : $clog2(C);
 	uwire  ivld = s_axis_tvalid;
 	uwire [C_BITS-1:0]  icnl;
-	uwire [M     -1:0]  idat[PE];
+	uwire [K     -1:0]  idat[PE];
 	for(genvar  pe = 0; pe < PE; pe++) begin
-		assign	idat[pe] = s_axis_tdata[pe*M+:M];
+		assign	idat[pe] = s_axis_tdata[pe*K+:K];
 	end
 
 	assign	s_axis_tready = en;
@@ -229,9 +233,9 @@ module thresholding_axi #(
 
 	// Core Thresholding Modules
 	for(genvar  pe = 0; pe < PE; pe++) begin : genCores
-		thresholding #(.N(N), .M(M), .C(C), .SIGNED(SIGNED), .BIAS(BIAS)) core (
+		thresholding #(.N(N), .K(K), .C(C), .SIGNED(SIGNED), .BIAS(BIAS)) core (
 			.clk, .rst,
-			.twe[pe], .twa, .twd,
+			.twe(twe[pe]), .twa, .twd,
 			.en,
 			.ivld, .icnl, .idat(idat[pe]),
 			.ovld(ovld[pe]), .ocnl(), .odat(odat[pe])

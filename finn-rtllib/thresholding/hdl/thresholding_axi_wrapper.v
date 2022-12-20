@@ -34,7 +34,7 @@
 
 module $MODULE_NAME_AXI_WRAPPER$ #(
 	parameter  N  = $N$,	// output precision
-	parameter  M  = $M$,	// input/threshold precision
+	parameter  K  = $K$,	// input/threshold precision
 	parameter  C  = $C$,	// Channels
 	parameter  PE = $PE$,	// Input parallelism
 	parameter  SIGNED = ($SIGN$ == "signed"),	// Input signedness
@@ -77,7 +77,7 @@ module $MODULE_NAME_AXI_WRAPPER$ #(
 	//- AXI Stream - Input --------------
 	output	s_axis_tready,
 	input	s_axis_tvalid,
-	input	[((M+7)/8)*8-1:0]  s_axis_tdata,
+	input	[((K+7)/8)*8-1:0]  s_axis_tdata,
 
 	//- AXI Stream - Output -------------
 	input	m_axis_tready,
@@ -85,7 +85,7 @@ module $MODULE_NAME_AXI_WRAPPER$ #(
 	output	[((O_BITS+7)/8)*8-1:0]  m_axis_tdata
 );
 
-	thresholding_axi #(.N(N), .M(M), .C(C), .PE(PE), .SIGNED(SIGNED), .BIAS(BIAS)) inst (
+	thresholding_axi #(.N(N), .K(K), .C(C), .PE(PE), .SIGNED(SIGNED), .BIAS(BIAS)) inst (
 		//- Global Control ------------------
 		.ap_clk(ap_clk),
 		.ap_rst_n(ap_rst_n),
