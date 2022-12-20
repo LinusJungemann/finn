@@ -34,8 +34,9 @@
  */
 
 module thresholding_axi_tb #(
-	int unsigned  N = 4,	// output precision
-	int unsigned  C = 3,	// number of channels
+	int unsigned  N  = 4,	// output precision
+	int unsigned  C  = 6,	// number of channels
+	int unsigned  PE = 3,
 	real  M0 = 4.2,	// slope of the uniform thresholding line
 	real  B0 = 6.8	// offset of the uniform thresholding line
 );
@@ -78,7 +79,7 @@ module thresholding_axi_tb #(
 
 	//-----------------------------------------------------------------------
 	// DUT interface signals
-	typedef logic [$clog2(C)+N+1:0]  waddr_t;
+	typedef logic [$clog2(C/PE)+$clog2(PE)+N+1:0]  waddr_t;
 	struct {
 		logic    vld;
 		logic    rdy;
@@ -92,14 +93,14 @@ module thresholding_axi_tb #(
 		wdata_t  val;
 	} wdata;
 
-	typedef logic [K-1:0]  idata_t;
+	typedef logic [PE-1:0][K-1:0]  idata_t;
 	struct {
 		logic    vld;
 		logic    rdy;
 		idata_t  val;
 	} idata;
 
-	typedef logic [N-1:0]  odata_t;
+	typedef logic [PE-1:0][N-1:0]  odata_t;
 	struct {
 		logic    vld;
 		logic    rdy;
@@ -107,7 +108,7 @@ module thresholding_axi_tb #(
 	} odata;
 
 	// DUT
-	thresholding_axi #(.N(N), .K(K), .C(C))
+	thresholding_axi #(.N(N), .K(K), .C(C), .PE(PE))
 	dut (
 		.ap_clk(clk), .ap_rst_n(!rst),
 
@@ -159,7 +160,11 @@ module thresholding_axi_tb #(
 		wdata.vld <= 1;
 		for(int unsigned  c = 0; c < C; c++) begin
 			for(int unsigned  i = 0; i < 2**N-1; i++) begin
-				waddr.val <= { c[C_BITS-1:0], i[N-1:0], 2'b00 };
+				waddr.val[0+:N+2] <= { i[N-1:0], 2'b00 };
+				if(C > 1) begin
+					if(PE > 1)  waddr.val[N+2+:$clog2(PE)] <= c % PE;
+					waddr.val[N+2+$clog2(PE)+:$clog2(C)] <= c / PE;
+				end
 				wdata.val <= THRESHS[c][i];
 				@(posedge clk iff waddr.rdy || wdata.rdy);
 				assert(waddr.rdy && wdata.rdy) else begin
@@ -175,7 +180,8 @@ module thresholding_axi_tb #(
 
 		// AXI4Stream MST Writes input values
 		repeat(ROUNDS) begin
-			automatic logic signed [K-1:0]  val = $urandom();
+			automatic idata_t  val;
+			foreach(val[pe])  val[pe] = $urandom();
 
 			repeat(2-$clog2(1+$urandom()%4)) @(posedge clk);
 			idata.vld <= 1;
@@ -203,7 +209,7 @@ module thresholding_axi_tb #(
 	always_ff @(posedge clk) begin
 		if(rst) begin
 			odata.rdy <= 0;
-			cnl_read  <= 0;
+			cnl_read   = 0;
 		end
 		else begin
 			if(!odata.rdy || odata.vld)  odata.rdy <= ($urandom()%3 != 0);
@@ -212,18 +218,20 @@ module thresholding_axi_tb #(
 					automatic idata_t  x = Q.pop_front();
 					automatic odata_t  y = odata.val;
 
-					assert(
-						((y ==      0) || ($signed(THRESHS[cnl_read][y-1]) <= $signed(x))) &&
-						((y == 2**N-1) || ($signed(x) < $signed(THRESHS[cnl_read][y])))
-					) else begin
-//						automatic string  l = 0 < y? $sformatf("[%0d] %0d", y-1, $signed(THRESHS[cnl_read][y-1])) : "-INFTY";
-//						automatic string  r = y < 2**N-1? $sformatf("[%0d] %0d", y, $signed(THRESHS[cnl_read][y])) : "INFTY";
-//						$error("Channel #%0d: Mispositioned output violating: %s <= [%0d] %0d < %s", cnl_read, l, y, x, r);
-						$error("%0d -> %0d", $signed(x), $signed(y));
-						$stop;
-					end
+					for(int unsigned  pe = 0; pe < PE; pe++) begin
+						assert(
+							((y[pe] ==      0) || ($signed(THRESHS[cnl_read][y[pe]-1]) <= $signed(x[pe]))) &&
+							((y[pe] == 2**N-1) || ($signed(x[pe]) < $signed(THRESHS[cnl_read][y[pe]])))
+						) else begin
+	//						automatic string  l = 0 < y? $sformatf("[%0d] %0d", y-1, $signed(THRESHS[cnl_read][y-1])) : "-INFTY";
+	//						automatic string  r = y < 2**N-1? $sformatf("[%0d] %0d", y, $signed(THRESHS[cnl_read][y])) : "INFTY";
+	//						$error("Channel #%0d: Mispositioned output violating: %s <= [%0d] %0d < %s", cnl_read, l, y, x, r);
+							$error("Channel #%0d on PE #%0d: %0d -> %0d", cnl_read, pe, $signed(x[pe]), $signed(y[pe]));
+							$stop;
+						end
 
-					cnl_read <= (cnl_read+1) % C;
+						cnl_read = (cnl_read+1) % C;
+					end
 				end
 				else begin
 					$error("Spurious output.");

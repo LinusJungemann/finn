@@ -203,7 +203,7 @@ module thresholding_axi #(
 
 	end : blkOutputDecouple
 
-	localparam int unsigned  C_BITS = C < 2? 1 : $clog2(C);
+	localparam int unsigned  C_BITS = C/PE < 2? 1 : $clog2(C/PE);
 	uwire  ivld = s_axis_tvalid;
 	uwire [C_BITS-1:0]  icnl;
 	uwire [K     -1:0]  idat[PE];
@@ -212,7 +212,7 @@ module thresholding_axi #(
 	end
 
 	assign	s_axis_tready = en;
-	if(C == 1)  assign  icnl = 'x;
+	if(C == PE)  assign  icnl = 'x;
 	else begin
 		logic [C_BITS-1:0]  Chnl = 0;
 		logic               Last = 0;
@@ -225,7 +225,7 @@ module thresholding_axi #(
 			end
 			else if(inc) begin
 				Chnl <= Chnl + 1;
-				Last <= (~Chnl & (C-2)) == 0;
+				Last <= (~Chnl & (C/PE-2)) == 0;
 			end
 		end
 		assign	icnl = Chnl;
@@ -233,7 +233,7 @@ module thresholding_axi #(
 
 	// Core Thresholding Modules
 	for(genvar  pe = 0; pe < PE; pe++) begin : genCores
-		thresholding #(.N(N), .K(K), .C(C), .SIGNED(SIGNED), .BIAS(BIAS)) core (
+		thresholding #(.N(N), .K(K), .C(C/PE), .SIGNED(SIGNED), .BIAS(BIAS)) core (
 			.clk, .rst,
 			.twe(twe[pe]), .twa, .twd,
 			.en,
