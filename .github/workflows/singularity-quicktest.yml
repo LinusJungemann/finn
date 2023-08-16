@@ -14,7 +14,7 @@ jobs:
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
         with:
-          root-reserve-mb: '32768'
+          root-reserve-mb: '28000'
           swap-size-mb: '128'
           remove-docker-images: 'true'
           remove-android: 'true'
@@ -50,7 +50,9 @@ jobs:
         run: df -h
       - name: Build Singularity image
         run: singularity build finn_singularity_image.sif docker-daemon://finn_docker_export:latest
-
+        continue-on-error: true
+      - name: Check free space
+        run: df -h
       - name: Run quicktest
         run: |
           export FINN_ROOT=$(pwd)
@@ -58,3 +60,5 @@ jobs:
           export FINN_INST_NAME=finn_gha
           export FINN_SINGULARITY=finn_singularity_image.sif
           ./run-docker.sh quicktest
+      - name: Check free space
+        run: df -h
