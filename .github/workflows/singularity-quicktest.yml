@@ -40,7 +40,14 @@ jobs:
           file: docker/Dockerfile.finn
           context: .
           load: true
+          no-cache: true
           tags: finn_docker_export:latest
+      - name: Check free space
+        run: df -h
+      - name: Clean Docker build cache
+        run: echo 'y' | docker builder prune
+      - name: Check free space
+        run: df -h
       - name: Build Singularity image
         run: singularity build finn_singularity_image.sif docker-daemon://finn_docker_export:latest
 
