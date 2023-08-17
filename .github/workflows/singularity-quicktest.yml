@@ -33,8 +33,8 @@ jobs:
           sudo apt update
           sudo apt install -y apptainer
           alias singularity="apptainer"
-          mkdir $PWD/singularity_tmp
-          export APPTAINER_TMPDIR=$PWD/singularity_tmp
+          mkdir $HOME/singularity_tmp
+          export APPTAINER_TMPDIR=$HOME/singularity_tmp
 
       - name: Build Docker image
         uses: docker/build-push-action@v4
@@ -50,8 +50,16 @@ jobs:
         run: echo 'y' | docker builder prune
       - name: Check free space
         run: df -h
+      - name: Check environment
+        run: |
+          echo $PWD
+          echo $HOME
+          echo $APPTAINER_TMPDIR
+          echo $TMPDIR
       - name: Build Singularity image
-        run: singularity build finn_singularity_image.sif docker-daemon://finn_docker_export:latest
+        run: |
+          export APPTAINER_TMPDIR=$HOME/singularity_tmp
+          singularity build finn_singularity_image.sif docker-daemon://finn_docker_export:latest
         continue-on-error: true
       - name: Check free space
         run: df -h
