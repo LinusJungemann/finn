@@ -39,8 +39,8 @@ jobs:
       - name: Build Docker image
         uses: docker/build-push-action@v4
         with:
-          file: finn/docker/Dockerfile.finn
-          context: .
+          file: docker/Dockerfile.finn
+          context: finn
           load: true
           no-cache: true
           tags: finn_docker_export:latest
