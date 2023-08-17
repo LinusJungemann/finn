@@ -23,6 +23,8 @@ jobs:
           remove-dotnet: 'true'
       - name: Checkout
         uses: actions/checkout@v3
+        with:
+          path: finn
       - name: Set up Docker
         uses: docker/setup-buildx-action@v2
         with:
@@ -33,13 +35,11 @@ jobs:
           sudo apt update
           sudo apt install -y apptainer
           alias singularity="apptainer"
-          mkdir $PWD/singularity_tmp
-          export APPTAINER_TMPDIR=$PWD/singularity_tmp
 
       - name: Build Docker image
         uses: docker/build-push-action@v4
         with:
-          file: docker/Dockerfile.finn
+          file: finn/docker/Dockerfile.finn
           context: .
           load: true
           no-cache: true
@@ -58,16 +58,16 @@ jobs:
           echo $TMPDIR
       - name: Build Singularity image
         run: |
+          mkdir $PWD/singularity_tmp
           export APPTAINER_TMPDIR=$PWD/singularity_tmp
-          singularity build finn_singularity_image.sif docker-daemon://finn_docker_export:latest
+          singularity build finn/finn_singularity_image.sif docker-daemon://finn_docker_export:latest
         continue-on-error: true
       - name: Check free space
         run: df -h
       - name: Run quicktest
         run: |
-          export FINN_ROOT=$(pwd)
-          export FINN_BUILD_DIR=/tmp/finn_gha
-          export FINN_INST_NAME=finn_gha
+          cd finn
+          export APPTAINER_TMPDIR=$PWD/singularity_tmp
           export FINN_SINGULARITY=finn_singularity_image.sif
           ./run-docker.sh quicktest
       - name: Check free space
