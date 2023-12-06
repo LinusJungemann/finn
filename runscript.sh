@@ -87,7 +87,9 @@ fi
 
 TMP_FOLDER=/tmp/jupyterhub/${USER}
 mkdir -p ${TMP_FOLDER}
-cp -r /finn/finn ${TMP_FOLDER}
+cd ${TMP_FOLDER} && git clone -b WorkshopVersionPC2_2023 --single-branch https://github.com/LinusJungemann/finn
+cd finn
+./fetch-repos.sh
 export FINN_ROOT=$TMP_FOLDER/finn
 mkdir -p $TMP_FOLDER/workdir
 export FINN_WORKDIR=$TMP_FOLDER/workdir
