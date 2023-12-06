@@ -1,0 +1,388 @@
+Bootstrap: docker
+From: ubuntu:jammy-20230126
+Stage: spython-base
+
+%files
+runscript.sh /opt/runscript.sh
+%labels
+maintainer="Yaman Umuroglu <yamanu@xilinx.com>"
+%post
+# Copyright (c) 2021, Xilinx
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# * Redistributions of source code must retain the above copyright notice, this
+#   list of conditions and the following disclaimer.
+#
+# * Redistributions in binary form must reproduce the above copyright notice,
+#   this list of conditions and the following disclaimer in the documentation
+#   and/or other materials provided with the distribution.
+#
+# * Neither the name of FINN nor the names of its
+#   contributors may be used to endorse or promote products derived from
+#   this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+XRT_DEB_VERSION="xrt_202220.2.14.354_22.04-amd64-xrt"
+
+mkdir -p /workspace
+cd /workspace
+
+# some Vitis deps require a timezone to be specified, which hangs in Docker
+# use workaround from https://grigorkh.medium.com/fix-tzdata-hangs-docker-image-build-cdb52cc3360d
+TZ="Europe/Dublin"
+ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+apt-get update && \
+apt-get install -y \
+build-essential \
+libc6-dev-i386 \
+libglib2.0-0 \
+libsm6 \
+libxext6 \
+libxrender-dev \
+nano \
+zsh \
+rsync \
+git \
+openssh-client \
+sshpass \
+wget \
+sudo \
+unzip \
+zip \
+locales \
+lsb-core \
+python3 \
+python-is-python3 \
+python3-pip \
+ca-certificates
+echo "StrictHostKeyChecking no" >> /etc/ssh/ssh_config
+locale-gen "en_US.UTF-8"
+
+#VNC
+# export DEBIAN_FRONTEND=noninteractive
+# apt-get install -y websockify dbus-x11 \
+# libgl1-mesa-glx \
+# xfce4 \
+# xfce4-panel \
+# xfce4-session \
+# xfce4-settings \
+# xorg \
+# xubuntu-icon-theme 
+
+# install Verilator from source to get the right version
+apt-get install -y git perl make autoconf g++ flex bison ccache libgoogle-perftools-dev numactl perl-doc libfl2 libfl-dev zlib1g zlib1g-dev
+git clone https://github.com/verilator/verilator
+cd verilator && \
+git checkout v4.224 && \
+autoconf && \
+./configure && \
+make -j16 && \
+make install
+
+# install XRT
+wget https://www.xilinx.com/bin/public/openDownload?filename=$XRT_DEB_VERSION.deb -O /tmp/$XRT_DEB_VERSION.deb
+apt install -y /tmp/$XRT_DEB_VERSION.deb
+rm /tmp/$XRT_DEB_VERSION.deb
+
+# versioned Python package requirements for FINN compiler
+# these are given in requirements.txt
+pip install bitstring==3.1.7
+pip install clize==5.0.1
+pip install dataclasses-json==0.5.7
+pip install gspread==3.6.0
+pip install importlib-resources==6.1.0
+#pip install ipython==8.12.2
+pip install ipython
+pip install numpy==1.24.1
+pip install onnx==1.13.0
+pip install onnxoptimizer
+pip install onnxruntime==1.15.0
+pip install pre-commit==3.3.2
+pip install protobuf==3.20.3
+pip install psutil==5.9.4
+pip install pyscaffold==4.4
+pip install scipy==1.10.1
+pip install setupext-janitor>=1.1.2
+pip install setuptools==68.2.2
+pip install sigtools==4.0.1
+pip install toposort==1.7.0
+pip install vcdvcd==1.0.5
+pip install wget==3.2
+pip install py
+
+# install PyTorch
+pip install torch==1.13.1 torchvision==0.14.1 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu116
+
+# extra Python package dependencies (for testing and interaction)
+pip install pygments==2.14.0
+pip install ipykernel==6.21.2
+#pip install jupyter==1.0.0 --ignore-installed
+pip install jupyter
+pip install markupsafe==2.0.1
+pip install matplotlib==3.7.0  --ignore-installed
+pip install pytest-dependency==0.5.1
+pip install pytest-xdist[setproctitle]==3.2.0
+pip install pytest-parallel==0.1.1
+pip install "netron>=5.0.0"
+pip install pandas==1.5.3
+pip install scikit-learn==1.2.1
+pip install tqdm==4.64.1
+pip install -e git+https://github.com/fbcotter/dataset_loading.git@0.0.4#egg=dataset_loading
+# these versions of pytest and associated plugins allow for stable collection of
+# test reports and code coverage reports in HTML
+pip install pytest==6.2.5
+pip install pytest-metadata==1.7.0
+pip install pytest-html==3.0.0
+pip install pytest-html-merger==0.0.8
+pip install pytest-cov==4.1.0
+
+# extra dependencies from other FINN deps
+# installed in Docker image to make entrypoint script go faster
+# finn-experimental
+pip install deap==1.3.1
+pip install mip==1.13.0
+pip install networkx==2.8
+# brevitas
+pip install future-annotations==1.0.0
+pip install dependencies==2.0.1
+pip install tokenize-rt==4.2.1
+# pyverilator
+pip install tclwrapper==0.0.1
+
+pip install git+https://github.com/jupyterhub/batchspawner
+pip install jupyterlab
+pip install jupyterhub
+
+# extra environment variables for FINN compiler
+VIVADO_IP_CACHE="/tmp/vivado_ip_cache"
+
+mkdir -p /finn && cd /finn
+git clone -b WorkshopVersionPC2_2023 --single-branch https://github.com/LinusJungemann/finn
+cd finn
+./fetch-repos.sh
+
+#qonnx
+pip install -e ./deps/qonnx
+# finn-experimental
+pip install -e ./deps/finn-experimental
+# brevitas
+pip install -e ./deps/brevitas
+# pyverilator
+pip install -e ./deps/pyverilator
+
+if [ -f "./setup.py" ];then
+  # run pip install for finn
+  pip install -e .
+else
+  echo "Unable to find FINN source code in ."
+  echo "Ensure you have passed -v <path-to-finn-repo>:<path-to-finn-repo> to the docker run command"
+  exit -1
+fi
+
+mv /usr/local/bin/batchspawner-singleuser /usr/local/bin/batchspawner-singleuser-old
+mv /opt/runscript.sh /usr/local/bin/batchspawner-singleuser
+chmod +x /usr/local/bin/batchspawner-singleuser
+
+%environment
+export OHMYXILINX=/finn/finn/deps/oh-my-xilinx
+export TZ="Europe/Dublin"
+export VIVADO_IP_CACHE="/tmp/vivado_ip_cache"
+export SHELL=/bin/bash
+export LANG="en_US.UTF-8"
+export LC_ALL="en_US.UTF-8"
+export LANGUAGE="en_US:en"
+# colorful terminal output
+export PS1='\[\033[1;36m\]\u\[\033[1;31m\]@\[\033[1;32m\]\h:\[\033[1;35m\]\w\[\033[1;31m\]\$\[\033[0m\] '
+export PATH=$PATH:$OHMYXILINX
+export PYTHONUSERBASE=""
+%runscript
+#!/bin/bash
+YELLOW='\033[0;33m'
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+export PYTHONUSERBASE=""
+
+yecho () {
+  echo -e "${YELLOW}WARNING: $1${NC}"
+}
+
+gecho () {
+  echo -e "${GREEN}$1${NC}"
+}
+
+recho () {
+  echo -e "${RED}ERROR: $1${NC}"
+}
+
+if [[ -z "${VITIS_PATH}" ]]; then
+  export XILINX_VITIS="/opt/software/FPGA/Xilinx/Vitis/2022.2"
+  yecho "VITIS_PATH environment variable not found. Using default ${XILINX_VITIS}"
+else
+  export XILINX_VITIS="${VITIS_PATH}"
+fi
+
+if [[ -z "${XILINX_XRT}" ]]; then
+  export XILINX_XRT="/opt/software/FPGA/Xilinx/xrt/xrt_2.14"
+  yecho "XILINX_XRT environment variable not found. Using default ${XILINX_XRT}"
+fi
+
+if [[ -z "${VIVADO_PATH}" ]]; then
+  export XILINX_VIVADO="/opt/software/FPGA/Xilinx/Vivado/2022.2"
+  yecho "VIVADO_PATH environment variable not found. Using default ${XILINX_VIVADO}"
+else
+  export XILINX_VIVADO="${VIVADO_PATH}"
+fi
+
+if [[ -z "${HLS_PATH}" ]]; then
+  export HLS_PATH="/opt/software/FPGA/Xilinx/Vitis_HLS/2022.2"
+  yecho "HLS_PATH environment variable not found. Using default ${HLS_PATH}"
+fi
+
+if [ -f "$XILINX_VITIS/settings64.sh" ];then
+  #export XILINX_XRT=/opt/xilinx/xrt
+  source $XILINX_VITIS/settings64.sh
+  echo "Found Vitis at $XILINX_VITIS"
+  #Manual XRT setup to avoid problems on the cluster
+  source $XILINX_XRT/share/completions/xbutil-bash-completion
+  source $XILINX_XRT/share/completions/xbmgmt-bash-completion
+  export LD_LIBRARY_PATH=$XILINX_XRT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+  export PATH=$XILINX_XRT/bin${PATH:+:$PATH}
+  export PYTHONPATH=$XILINX_XRT/python${PYTHONPATH:+:$PYTHONPATH}
+else
+  yecho "Unable to find $XILINX_VITIS/settings64.sh"
+  yecho "Functionality dependent on Vitis will not be available."
+  yecho "If you need Vitis, ensure VITIS_PATH is set correctly and mounted into the Docker container."
+  if [ -f "$XILINX_VIVADO/settings64.sh" ];then
+    # source Vivado env.vars
+    source $XILINX_VIVADO/settings64.sh
+    gecho "Found Vivado at $XILINX_VIVADO"
+  else
+    yecho "Unable to find $XILINX_VIVADO/settings64.sh"
+    yecho "Functionality dependent on Vivado will not be available."
+    yecho "If you need Vivado, ensure VIVADO_PATH is set correctly and mounted into the Docker container."
+  fi
+fi
+
+if [ -f "$HLS_PATH/settings64.sh" ];then
+  # source Vitis HLS env.vars
+  source $HLS_PATH/settings64.sh
+  gecho "Found Vitis HLS at $HLS_PATH"
+else
+  yecho "Unable to find $HLS_PATH/settings64.sh"
+  yecho "Functionality dependent on Vitis HLS will not be available."
+  yecho "Please note that FINN needs at least version 2020.2 for Vitis HLS support."
+  yecho "If you need Vitis HLS, ensure HLS_PATH is set correctly and mounted into the Docker container."
+fi
+
+TMP_FOLDER=/tmp/jupyterhub
+mkdir -p ${TMP_FOLDER}
+cp -r /finn/finn/notebooks ${TMP_FOLDER}/notebooks
+export FINN_ROOT=$TMP_FOLDER
+mkdir -p $TMP_FOLDER/workdir
+export FINN_WORKDIR=$TMP_FOLDER/workdir
+export PYTHONUSERBASE=""
+jupyter lab --no-browser --ip=0.0.0.0 --notebook-dir=${TMP_FOLDER}/notebooks
+
+%startscript
+#!/bin/bash
+YELLOW='\033[0;33m'
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+yecho () {
+  echo -e "${YELLOW}WARNING: $1${NC}"
+}
+
+gecho () {
+  echo -e "${GREEN}$1${NC}"
+}
+
+recho () {
+  echo -e "${RED}ERROR: $1${NC}"
+}
+
+if [[ -z "${VITIS_PATH}" ]]; then
+  export XILINX_VITIS="/opt/software/FPGA/Xilinx/Vitis/2022.2"
+  yecho "VITIS_PATH environment variable not found. Using default ${XILINX_VITIS}"
+else
+  export XILINX_VITIS="${VITIS_PATH}"
+fi
+
+if [[ -z "${XILINX_XRT}" ]]; then
+  export XILINX_XRT="/opt/software/FPGA/Xilinx/xrt/xrt_2.14"
+  yecho "XILINX_XRT environment variable not found. Using default ${XILINX_XRT}"
+fi
+
+if [[ -z "${VIVADO_PATH}" ]]; then
+  export XILINX_VIVADO="/opt/software/FPGA/Xilinx/Vivado/2022.2"
+  yecho "VIVADO_PATH environment variable not found. Using default ${XILINX_VIVADO}"
+else
+  export XILINX_VIVADO="${VIVADO_PATH}"
+fi
+
+if [[ -z "${HLS_PATH}" ]]; then
+  export HLS_PATH="/opt/software/FPGA/Xilinx/Vitis_HLS/2022.2"
+  yecho "HLS_PATH environment variable not found. Using default ${HLS_PATH}"
+fi
+
+if [ -f "$XILINX_VITIS/settings64.sh" ];then
+  #export XILINX_XRT=/opt/xilinx/xrt
+  source $XILINX_VITIS/settings64.sh
+  echo "Found Vitis at $XILINX_VITIS"
+      #Manual XRT setup to avoid problems on the cluster
+    source $XILINX_XRT/share/completions/xbutil-bash-completion
+    source $XILINX_XRT/share/completions/xbmgmt-bash-completion
+    export LD_LIBRARY_PATH=$XILINX_XRT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+    export PATH=$XILINX_XRT/bin${PATH:+:$PATH}
+    export PYTHONPATH=$XILINX_XRT/python${PYTHONPATH:+:$PYTHONPATH}
+else
+  yecho "Unable to find $XILINX_VITIS/settings64.sh"
+  yecho "Functionality dependent on Vitis will not be available."
+  yecho "If you need Vitis, ensure VITIS_PATH is set correctly and mounted into the Docker container."
+  if [ -f "$XILINX_VIVADO/settings64.sh" ];then
+    # source Vivado env.vars
+    source $XILINX_VIVADO/settings64.sh
+    gecho "Found Vivado at $XILINX_VIVADO"
+  else
+    yecho "Unable to find $XILINX_VIVADO/settings64.sh"
+    yecho "Functionality dependent on Vivado will not be available."
+    yecho "If you need Vivado, ensure VIVADO_PATH is set correctly and mounted into the Docker container."
+  fi
+fi
+
+if [ -f "$HLS_PATH/settings64.sh" ];then
+  # source Vitis HLS env.vars
+  source $HLS_PATH/settings64.sh
+  gecho "Found Vitis HLS at $HLS_PATH"
+else
+  yecho "Unable to find $HLS_PATH/settings64.sh"
+  yecho "Functionality dependent on Vitis HLS will not be available."
+  yecho "Please note that FINN needs at least version 2020.2 for Vitis HLS support."
+  yecho "If you need Vitis HLS, ensure HLS_PATH is set correctly and mounted into the Docker container."
+fi
+
+TMP_FOLDER=$(mktemp -d)
+cp -r /finn/finn/notebooks ${TMP_FOLDER}/notebooks
+export FINN_ROOT=$TMP_FOLDER
+mkdir -p $TMP_FOLDER/workdir
+export FINN_WORKDIR=$TMP_FOLDER/workdir
+export PYTHONUSERBASE=""
+
+#Container start command: PYTHONUSERBASE="" SINGULARITYENV_XILINX_XRT=$XILINX_XRT SINGULARITYENV_VITIS_PATH=/opt/software/FPGA/Xilinx/Vitis/2022.2 SINGULARITYENV_VIVADO_PATH=/opt/software/FPGA/Xilinx/Vivado/2022.2 SINGULARITYENV_HLS_PATH=/opt/software/FPGA/Xilinx/Vitis_HLS/2022.2 SINGULARITY_BIND="/opt" singularity run finn_singularity.sif
+PYTHONUSERBASE="" SINGULARITYENV_XILINX_XRT=/opt/software/FPGA/Xilinx/xrt/xrt_2.14 SINGULARITYENV_VITIS_PATH=/opt/software/FPGA/Xilinx/Vitis/2022.2 SINGULARITYENV_VIVADO_PATH=/opt/software/FPGA/Xilinx/Vivado/2022.2 SINGULARITYENV_HLS_PATH=/opt/software/FPGA/Xilinx/Vitis_HLS/2022.2 SINGULARITY_BIND="/opt"
