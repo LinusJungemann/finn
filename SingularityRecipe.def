@@ -81,7 +81,7 @@ locale-gen "en_US.UTF-8"
 # xfce4-session \
 # xfce4-settings \
 # xorg \
-# xubuntu-icon-theme 
+# xubuntu-icon-theme
 
 # install Verilator from source to get the right version
 apt-get install -y git perl make autoconf g++ flex bison ccache libgoogle-perftools-dev numactl perl-doc libfl2 libfl-dev zlib1g zlib1g-dev
